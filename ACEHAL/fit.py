@@ -18,7 +18,55 @@ ASEAtoms = Main.eval("ASEAtoms(a) = ASE.ASEAtoms(a)")
 
 from .ace_committee_calc import ACECommittee
 
+def fit_acefit(atoms_list, totaldegree, rcut, order, E0s, file_root, HAL_label, data_keys, n_committee=8):
+    """Fit a ACE model using acefit!"""
+    from ase.io import write
+    write('fitting_temp.extxyz', atoms_list)
+    Main.eval("using ACEpotentials")
 
+    # Load data to Julia
+    Main.eval(f'data = read_extxyz("fitting_temp.extxyz")')
+
+    # Define the model
+    element_string = '[' + ', '.join([':' + elem for elem in E0s.keys()]) + ']'
+
+    Eref_string = '[' + ', '.join([f':{key} => {value}' for key, value in E0s.items()]) + ']'
+    model_string = f"""
+    model = acemodel(
+        elements = {element_string},
+        order = {order},
+        totaldegree = {totaldegree},
+        rcut = {rcut},
+        Eref = {Eref_string}
+    )
+"""
+    Main.eval(model_string)
+
+    # Setup the data_keys which is a named tuple
+    keyname = data_keys['E']
+    data_key_string = f'( energy_key = "{keyname}"'
+    keyname = data_keys['F']
+    data_key_string += f', force_key = "{keyname}"'
+    if 'V' in data_keys:
+        keyname = data_keys['V']
+        data_key_string += f', virial_key = "{keyname}"'
+    data_key_string += ')'
+
+    Main.eval(f'data_keys = {data_key_string}')
+
+    solver_string = f"""
+    solver = ACEfit.BLR(committee_size={n_committee}, factorization=:svd); 
+"""
+    Main.eval(solver_string)
+    # Run fitting
+    Main.eval("acefit!(model, data;solver=solver, data_keys...)")
+    # Output the model fitting
+    Main.eval(f'save_potential("{file_root}.pot.{HAL_label}.json", model)')
+    committee_calc = ACECommittee("model.potential", "model.potential")
+    return committee_calc
+
+
+    
 def fit(atoms_list, solver, B_len_norm, E0s, data_keys, weights, Fmax=10.0, n_committee=8,
         rng=None, pot_file=None, data_save_label=None, return_linear_problem=False, report_errors=True,
         verbose=False):
