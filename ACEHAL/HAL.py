@@ -24,7 +24,7 @@ def HAL(fit_configs, traj_configs, basis_source, solver, fit_kwargs, n_iters, re
          traj_len, dt_fs, tol, tau_rel, T_K, P_GPa=None, cell_fixed_shape=False, T_timescale_fs=100, tol_eps=0.1, tau_hist=100,
          cell_step_interval=10, swap_step_interval=0, cell_step_mag=0.01,
          default_basis_info=None, basis_optim_kwargs=None, basis_optim_interval=None,
-         file_root=None, traj_interval=10, test_configs=[], test_fraction=0.0, use_acefit=False):
+         file_root=None, traj_interval=10, test_configs=[], test_fraction=0.0, use_acefit=False, no_virial=False):
     """Iterate with hyperactive learning
 
     Parameters
@@ -296,7 +296,7 @@ def HAL(fit_configs, traj_configs, basis_source, solver, fit_kwargs, n_iters, re
             if 'F' in data_keys:
                 F = new_config.get_forces()
                 new_config.new_array(data_keys['F'], F)
-            if 'V' in data_keys:
+            if 'V' in data_keys and not no_virial:
                 try:
                     V = - new_config.get_volume() * new_config.get_stress(voigt=False)
                     new_config.info[data_keys['V']] = V
@@ -407,9 +407,8 @@ def _fit(fit_configs, solver, fit_kwargs, B_len_norm, file_root, HAL_label, use_
     pot_filename = str(file_root.parent / (file_root.name + f".pot.{HAL_label}.json"))
 
     if use_acefit:
-        totaldegress=fit_kwargs['maxdeg']
         committee_calc = fit_acefit(fit_configs, fit_kwargs['maxdeg'], fit_kwargs['rcut'], fit_kwargs['order'], fit_kwargs['E0s'], file_root, HAL_label, fit_kwargs['data_keys'],
-                                     n_committee=fit_kwargs.get('num_committee', 24))
+                                     n_committee=fit_kwargs.get('num_committee', 24), nprocs=fit_kwargs.get('julia_nprocs', 1))
     else:
         committee_calc = fit(atoms_list=fit_configs, solver=solver, B_len_norm=B_len_norm,
                          return_linear_problem=False, pot_file=pot_filename, **fit_kwargs)

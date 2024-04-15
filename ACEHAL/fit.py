@@ -18,11 +18,27 @@ ASEAtoms = Main.eval("ASEAtoms(a) = ASE.ASEAtoms(a)")
 
 from .ace_committee_calc import ACECommittee
 
-def fit_acefit(atoms_list, totaldegree, rcut, order, E0s, file_root, HAL_label, data_keys, n_committee=8):
+def fit_acefit(atoms_list, totaldegree, rcut, order, E0s, file_root, HAL_label, data_keys, n_committee=8, nprocs=1):
     """Fit a ACE model using acefit!"""
     from ase.io import write
+    # Zero out the forces/energy data reference data
+    for atoms in atoms_list:
+        atoms.calc = None
     write('fitting_temp.extxyz', atoms_list)
-    Main.eval("using ACEpotentials")
+    # Add processor if necessary
+    if nprocs > 1:
+        Main.eval("using Distributed")
+        # Add processes if necessary
+        Main.eval(f"""
+        procs_to_add = {nprocs} - nprocs()
+        if procs_to_add > 0
+            addprocs(procs_to_add)
+        end
+        @everywhere using ACEpotentials
+        """
+                  )
+    else:
+        Main.eval("using ACEpotentials")
 
     # Load data to Julia
     Main.eval(f'data = read_extxyz("fitting_temp.extxyz")')
